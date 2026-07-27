@@ -49,3 +49,21 @@ def test_valid_corrupt_and_unsupported_archives(tmp_path):
     assert report["archives"][0]["members"] == 2
     assert report["archives"][1]["error"] == "BadZipFile"
     assert report["archives"][2]["error"] == "unsupported archive family"
+
+
+def test_safety_warnings_and_ratio_limit(tmp_path):
+    import zipfile
+
+    risky = tmp_path / "risky.zip"
+    with zipfile.ZipFile(risky, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("../escape.txt", "x" * 5000)
+    empty = tmp_path / "empty.zip"
+    with zipfile.ZipFile(empty, "w"):
+        pass
+    report = analyze({"paths": [str(risky), str(empty)], "max_compression_ratio": 2})
+    assert report["warning_count"] == 3
+    assert report["archives"][0]["unsafe_members"] == ["../escape.txt"]
+    assert report["archives"][0]["high_compression_members"] == ["../escape.txt"]
+    assert report["archives"][1]["warnings"] == ["empty archive"]
+    with pytest.raises(ValueError, match="positive"):
+        analyze({"paths": [str(empty)], "max_compression_ratio": 0})

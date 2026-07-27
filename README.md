@@ -12,7 +12,7 @@ archive-integrity examples/sample.json
 archive-integrity examples/sample.json --format json --output report.json
 ```
 
-The example documents the v1 input shape. Existing report files are never overwritten. Source inputs are read-only except where the documented purpose explicitly creates a new output artifact.
+The example documents the input shape. Version 1.1 warns about empty containers, unsafe member paths, and members above a configurable `max_compression_ratio`, while retaining the exact member evidence. Existing report files are never overwritten. Source inputs are read-only except where the documented purpose explicitly creates a new output artifact.
 
 ## Privacy and platforms
 
@@ -20,7 +20,7 @@ The tool runs locally and does not upload input or include telemetry. Python 3.1
 
 ## Interpretation boundary
 
-V1 validates ZIP-family containers only. A structurally valid archive can still contain unsafe, misleading, or semantically invalid content.
+The tool validates ZIP-family containers only. Warnings are review evidence rather than malware findings; a structurally valid archive can still contain unsafe, misleading, or semantically invalid content.
 
 ## Development
 
