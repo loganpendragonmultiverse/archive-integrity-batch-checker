@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import lzma
+import math
 import re
 import zipfile
+import zlib
 from collections import Counter
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -19,8 +22,17 @@ def _require(data: dict[str, Any], key: str) -> Any:
 
 def _archive_integrity(data: dict[str, Any]) -> dict[str, Any]:
     max_ratio = float(data.get("max_compression_ratio", 1000))
-    if max_ratio <= 0:
+    if not math.isfinite(max_ratio) or max_ratio <= 0:
         raise ValueError("max_compression_ratio must be positive")
+    budgets = {}
+    for key, default in (
+        ("max_member_bytes", 256 * 1024 * 1024),
+        ("max_total_bytes", 1024 * 1024 * 1024),
+    ):
+        value = data.get(key, default)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise ValueError(f"{key} must be a positive integer")
+        budgets[key] = value
     results: list[dict[str, Any]] = []
     for raw in _require(data, "paths"):
         path = Path(raw).resolve()
@@ -31,6 +43,10 @@ def _archive_integrity(data: dict[str, Any]) -> dict[str, Any]:
             "members": 0,
             "error": None,
             "warnings": [],
+            "verification_complete": False,
+            "status": "error",
+            "decompressed_bytes": 0,
+            "budget_exhausted": None,
         }
         if not path.is_file():
             item["error"] = "file not found"
@@ -39,7 +55,7 @@ def _archive_integrity(data: dict[str, Any]) -> dict[str, Any]:
         else:
             try:
                 with zipfile.ZipFile(path) as archive:
-                    bad = archive.testzip()
+                    bad = None
                     names = archive.namelist()
                     infos = archive.infolist()
                     unsafe_names = [
@@ -62,9 +78,63 @@ def _archive_integrity(data: dict[str, Any]) -> dict[str, Any]:
                         warnings.append("unsafe member paths")
                     if high_ratio:
                         warnings.append("high compression ratio")
+                    total = 0
+                    complete = True
+                    for info in infos:
+                        member_bytes = 0
+                        if info.flag_bits & 1:
+                            item["error"] = "encrypted member"
+                            bad = info.filename
+                            complete = False
+                            break
+                        try:
+                            with archive.open(info) as member:
+                                while True:
+                                    remaining = min(
+                                        budgets["max_member_bytes"] - member_bytes,
+                                        budgets["max_total_bytes"] - total,
+                                    )
+                                    chunk = member.read(min(65536, remaining + 1))
+                                    if not chunk:
+                                        break
+                                    member_bytes += len(chunk)
+                                    total += len(chunk)
+                                    if (
+                                        member_bytes > budgets["max_member_bytes"]
+                                        or total > budgets["max_total_bytes"]
+                                    ):
+                                        item["budget_exhausted"] = (
+                                            "max_member_bytes"
+                                            if member_bytes > budgets["max_member_bytes"]
+                                            else "max_total_bytes"
+                                        )
+                                        complete = False
+                                        break
+                            if not complete:
+                                break
+                            if member_bytes != info.file_size:
+                                raise zipfile.BadZipFile("member size mismatch")
+                        except (
+                            OSError,
+                            EOFError,
+                            RuntimeError,
+                            NotImplementedError,
+                            zipfile.BadZipFile,
+                            zlib.error,
+                            lzma.LZMAError,
+                        ) as exc:
+                            item["error"] = type(exc).__name__
+                            bad = info.filename
+                            complete = False
+                            break
                     item.update(
                         {
-                            "valid": bad is None,
+                            "valid": complete and bad is None,
+                            "verification_complete": complete,
+                            "status": "verified"
+                            if complete
+                            else ("incomplete" if item["budget_exhausted"] else "error"),
+                            "decompressed_bytes": total,
                             "members": len(names),
                             "first_bad_member": bad,
                             "duplicate_names": sorted(
@@ -82,6 +152,8 @@ def _archive_integrity(data: dict[str, Any]) -> dict[str, Any]:
     return {
         "archives": results,
         "max_compression_ratio": max_ratio,
+        **budgets,
+        "incomplete_count": sum(item["status"] == "incomplete" for item in results),
         "valid_count": sum(item["valid"] for item in results),
         "invalid_count": sum(not item["valid"] for item in results),
         "warning_count": sum(len(item["warnings"]) for item in results),

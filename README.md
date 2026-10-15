@@ -36,3 +36,14 @@ python -m build
 The project is feature-complete for its documented v1 scope. Maintenance focuses on correctness, security, compatibility, and well-supported input improvements.
 
 Part of the [Logan Pendragon Forge open-source collection](https://www.loganpendragonforge.com/open-source/). Licensed under the [MIT License](LICENSE).
+
+## Streaming verification budgets
+
+Version 1.2 reads members in chunks with positive integer max_member_bytes
+(default 268435456) and max_total_bytes (default 1073741824, per archive).
+Limits count decompressed bytes, including directory entries. Reading stops after
+at most one extra byte to detect exhaustion. Exact-limit archives can verify.
+A status of incomplete, budget_exhausted, and verification_complete: false
+identify budget exhaustion; these archives never count as valid.
+Encrypted, unsupported, and corrupt members report errors. No member is extracted.
+Budgets limit decompressed output reads, not ZIP metadata memory or CPU time.
