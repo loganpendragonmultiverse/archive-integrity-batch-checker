@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0 — 2026-10-15
+
+- Stream member verification with per-member and per-archive decompression budgets.
+- Report exhausted verification as incomplete, and encrypted/corrupt members as errors.
+
 ## 1.1.0 - 2026-07-27
 
 - Added warnings for empty archives, unsafe member paths, and configurable high compression ratios.
