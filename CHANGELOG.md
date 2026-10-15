@@ -2,6 +2,7 @@
 
 ## 1.2.0 — 2026-10-15
 
+- Keep malformed LZMA member errors within their archive so later archives still verify.
 - Stream member verification with per-member and per-archive decompression budgets.
 - Report exhausted verification as incomplete, and encrypted/corrupt members as errors.
 

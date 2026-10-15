@@ -72,3 +72,22 @@ def test_size_and_unsupported_compression(tmp_path):
     struct.pack_into("<H", changed, central + 10, 99)
     path.write_bytes(changed)
     assert result(path)["error"] == "NotImplementedError"
+
+
+def test_malformed_lzma_is_a_batch_error(tmp_path):
+    import lzma
+
+    broken = tmp_path / "broken.zip"
+    with zipfile.ZipFile(broken, "w", compression=zipfile.ZIP_LZMA) as handle:
+        handle.writestr("a", b"hello world" * 100)
+    content = bytearray(broken.read_bytes())
+    central = content.index(b"PK\x01\x02")
+    # Keep the LZMA header/properties intact and corrupt the compressed stream.
+    content[40:central] = b"\xff" * (central - 40)
+    broken.write_bytes(content)
+    good = archive(tmp_path, [("a", b"safe")])
+    report = analyze({"paths": [str(broken), str(good)], "max_member_bytes": 2000})
+    assert report["archives"][0]["error"] == lzma.LZMAError.__name__
+    assert report["archives"][0]["status"] == "error"
+    assert not report["archives"][0]["verification_complete"]
+    assert report["archives"][1]["valid"] and report["valid_count"] == 1

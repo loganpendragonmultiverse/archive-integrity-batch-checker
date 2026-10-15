@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import lzma
 import math
 import re
 import zipfile
@@ -120,6 +121,7 @@ def _archive_integrity(data: dict[str, Any]) -> dict[str, Any]:
                             NotImplementedError,
                             zipfile.BadZipFile,
                             zlib.error,
+                            lzma.LZMAError,
                         ) as exc:
                             item["error"] = type(exc).__name__
                             bad = info.filename
