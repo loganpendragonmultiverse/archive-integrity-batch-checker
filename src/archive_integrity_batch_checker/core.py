@@ -4,6 +4,7 @@ import json
 import lzma
 import math
 import re
+import stat
 import zipfile
 import zlib
 from collections import Counter
@@ -13,17 +14,21 @@ from typing import Any
 PROJECT = "archive-integrity-batch-checker"
 
 
-def _require(data: dict[str, Any], key: str) -> Any:
-    value = data.get(key)
-    if value is None or value == "" or value == []:
-        raise ValueError(f"{key} is required")
-    return value
-
-
 def _archive_integrity(data: dict[str, Any]) -> dict[str, Any]:
-    max_ratio = float(data.get("max_compression_ratio", 1000))
+    paths = data.get("paths")
+    if not isinstance(paths, list) or not paths:
+        raise ValueError("paths is required and must be a non-empty array of path strings")
+    if any(not isinstance(path, str) or not path.strip() or "\x00" in path for path in paths):
+        raise ValueError("paths must contain non-empty path strings without NUL characters")
+    ratio = data.get("max_compression_ratio", 1000)
+    if isinstance(ratio, bool) or not isinstance(ratio, (int, float)):
+        raise TypeError("max_compression_ratio must be a finite positive number")
+    try:
+        max_ratio = float(ratio)
+    except OverflowError as exc:
+        raise ValueError("max_compression_ratio must be a finite positive number") from exc
     if not math.isfinite(max_ratio) or max_ratio <= 0:
-        raise ValueError("max_compression_ratio must be positive")
+        raise ValueError("max_compression_ratio must be a finite positive number")
     budgets = {}
     for key, default in (
         ("max_member_bytes", 256 * 1024 * 1024),
@@ -34,11 +39,11 @@ def _archive_integrity(data: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(f"{key} must be a positive integer")
         budgets[key] = value
     results: list[dict[str, Any]] = []
-    for raw in _require(data, "paths"):
-        path = Path(raw).resolve()
+    for raw in paths:
+        path = Path(raw).absolute()
         item = {
             "path": str(path),
-            "bytes": path.stat().st_size if path.exists() else 0,
+            "bytes": 0,
             "valid": False,
             "members": 0,
             "error": None,
@@ -48,7 +53,18 @@ def _archive_integrity(data: dict[str, Any]) -> dict[str, Any]:
             "decompressed_bytes": 0,
             "budget_exhausted": None,
         }
-        if not path.is_file():
+        try:
+            metadata = path.stat()
+            item["bytes"] = metadata.st_size
+        except FileNotFoundError:
+            item["error"] = "file not found"
+            results.append(item)
+            continue
+        except OSError as exc:
+            item["error"] = type(exc).__name__
+            results.append(item)
+            continue
+        if not stat.S_ISREG(metadata.st_mode):
             item["error"] = "file not found"
         elif path.suffix.lower() not in {".zip", ".cbz", ".epub"}:
             item["error"] = "unsupported archive family"
@@ -146,7 +162,13 @@ def _archive_integrity(data: dict[str, Any]) -> dict[str, Any]:
                             "warnings": warnings,
                         }
                     )
-            except (OSError, zipfile.BadZipFile) as exc:
+            except (
+                OSError,
+                EOFError,
+                NotImplementedError,
+                UnicodeError,
+                zipfile.BadZipFile,
+            ) as exc:
                 item["error"] = type(exc).__name__
         results.append(item)
     return {
@@ -161,6 +183,8 @@ def _archive_integrity(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def analyze(data: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(data, dict):
+        raise TypeError("input must be a JSON object")
     return {"version": 1, "project": PROJECT, **_archive_integrity(data)}
 
 
