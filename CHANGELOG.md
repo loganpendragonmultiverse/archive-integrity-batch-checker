@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.1 — 2026-10-20
+
+- Validate JSON roots, path arrays and finite numeric ratio settings explicitly.
+- Isolate missing or inaccessible archive metadata errors within a batch.
+- Preserve existing, linked and concurrently created report destinations.
+- Add the testing contract and install all four authority documents and sample in both packages.
+
 ## 1.2.0 — 2026-10-15
 
 - Keep malformed LZMA member errors within their archive so later archives still verify.

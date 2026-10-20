@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "archive-integrity-batch-checker"
-version = "1.2.0"
+version = "1.2.1"
 description = "Validate ZIP, CBZ, and EPUB archives in bulk without permanently extracting them."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -35,3 +35,7 @@ omit = ["src/*/__main__.py"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--cov=archive_integrity_batch_checker --cov-branch --cov-report=term-missing --cov-fail-under=90"
+
+[tool.setuptools.data-files]
+"share/doc/archive-integrity-batch-checker" = ["README.md", "DEVELOPMENT.md", "TESTING.md", "CHANGELOG.md"]
+"share/doc/archive-integrity-batch-checker/examples" = ["examples/sample.json"]
