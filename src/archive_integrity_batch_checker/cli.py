@@ -15,6 +15,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("input", type=Path, help="UTF-8 JSON input file")
     parser.add_argument("--format", choices=("markdown", "json"), default="markdown")
     parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--fail-on",
+        choices=("invalid", "incomplete", "warning"),
+        action="append",
+        default=[],
+        help="Return exit 1 after reporting if a selected count is nonzero; repeat to combine.",
+    )
     args = parser.parse_args(argv)
     try:
         data = json.loads(args.input.read_text(encoding="utf-8"))
@@ -30,4 +37,4 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, TypeError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    return 0
+    return 1 if any(report[f"{policy}_count"] for policy in args.fail_on) else 0
