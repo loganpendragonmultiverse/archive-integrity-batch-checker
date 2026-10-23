@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.0 - 2026-10-23
+
+- Add repeatable optional exit policies for invalid, incomplete and warning reports; retain exit 0 by default and operational-error exit 2.
+- Produce unchanged full reports before policy exit 1, with source-read-only and exclusive-output behavior preserved.
+
 ## 1.2.1 — 2026-10-20
 
 - Validate JSON roots, path arrays and finite numeric ratio settings explicitly.
